@@ -293,6 +293,42 @@ async def negotiate_invoice(req: NegotiationRequest):
     return {"ai_message": ai_decision.get("reply", "Full amount required."), "new_link": invoice["payment_link_url"]}
 
 
+# ─────────────────────────────────────────────────────────────────
+# DEV / DEMO TOOL: Time-Travel Aging Simulator
+# Backdates an invoice's created_at to simulate it aging 10 days.
+# Use this during demos to show how the AI escalation tone shifts
+# from Polite → Urgent when an invoice becomes overdue.
+# ─────────────────────────────────────────────────────────────────
+class AgeInvoiceRequest(BaseModel):
+    invoice_id: str
+
+@app.post("/api/dev-simulate-aging")
+async def simulate_invoice_aging(req: AgeInvoiceRequest):
+    try:
+        past_date = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=10)).isoformat()
+
+        # Update Supabase (primary store)
+        try:
+            supabase.table("invoices") \
+                .update({"created_at": past_date}) \
+                .eq("id", req.invoice_id) \
+                .execute()
+        except Exception as supa_err:
+            print(f"[Supabase Notice] Aging update failed ({supa_err}). Applying to in-memory only.")
+
+        # Also patch the in-memory fallback ledger so the UI refreshes correctly
+        if req.invoice_id in in_memory_ledger:
+            in_memory_ledger[req.invoice_id]["created_at"] = past_date
+
+        return {
+            "status": "success",
+            "message": f"Time warp successful. Invoice {req.invoice_id} aged by 10 days.",
+            "new_created_at": past_date
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/webhook/razorpay")
 async def razorpay_webhook(request: Request):
     """Listens for Razorpay payment events and auto-updates invoice status."""

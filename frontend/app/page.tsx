@@ -141,6 +141,20 @@ export default function Dashboard() {
     }
   };
 
+  // One-Click WhatsApp Redirect — pre-fills customer phone + email body into wa.me deep-link
+  const triggerWhatsAppSend = () => {
+    if (!selectedInvoice || !generatedEmail) return;
+
+    // Normalise phone: strip spaces/dashes, add 91 country code if not already present
+    const rawPhone = (selectedInvoice.customer_phone || "").replace(/[\s\-().+]/g, "");
+    const formattedPhone = rawPhone.startsWith("91") ? rawPhone : `91${rawPhone}`;
+
+    const encodedText = encodeURIComponent(generatedEmail);
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedText}`;
+
+    window.open(whatsappUrl, "_blank");
+  };
+
   // Trigger Groq AI Agent via FastAPI — Negotiation
   const handleNegotiation = async () => {
     if (!selectedInvoice || !customerReply.trim()) return;
@@ -173,6 +187,28 @@ export default function Dashboard() {
     setNegotiationResult(null);
     setCustomerReply("");
     setActiveTab("reminder");
+  };
+
+  // ⏳ DEV TOOL: Simulates invoice aging by 10 days for demo purposes.
+  // Shows judges how the AI escalation tone shifts from Polite → Urgent automatically.
+  const handleSimulateAging = async (invoiceId: string, customerName: string) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/dev-simulate-aging`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_id: invoiceId }),
+      });
+      const data = await response.json();
+      if (data.status === "success") {
+        alert(`⏳ Time Warp Complete!\n\n"${customerName}"'s invoice has been backdated by 10 days.\nRe-run the AI Reminder Agent to see the escalation tone shift to URGENT.`);
+        fetchInvoices();
+      } else {
+        alert("Aging simulation failed. Check backend logs.");
+      }
+    } catch (err) {
+      console.error("Aging simulation error:", err);
+      alert("Could not reach backend. Is it running on port 8000?");
+    }
   };
 
   return (
@@ -249,21 +285,30 @@ export default function Dashboard() {
                       {inv.status}
                     </span>
                   </td>
-                  <td className="py-4 text-right pr-2 space-x-3">
-                    <a 
-                      href={inv.payment_link_url} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="text-xs text-indigo-400 hover:text-indigo-300 font-medium underline transition-colors"
-                    >
-                      Pay Link
-                    </a>
-                    <button 
-                      onClick={() => openAgentHub(inv)} 
-                      className="bg-gray-700 hover:bg-indigo-600 text-xs px-3 py-1.5 rounded-md font-medium shadow-sm transition-all duration-200 active:scale-95 text-white"
-                    >
-                      Agent Actions
-                    </button>
+                  <td className="py-4 text-right pr-2">
+                    <div className="flex items-center justify-end gap-2 flex-wrap">
+                      <a 
+                        href={inv.payment_link_url} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="text-xs text-indigo-400 hover:text-indigo-300 font-medium underline transition-colors"
+                      >
+                        Pay Link
+                      </a>
+                      <button 
+                        onClick={() => openAgentHub(inv)} 
+                        className="bg-gray-700 hover:bg-indigo-600 text-xs px-3 py-1.5 rounded-md font-medium shadow-sm transition-all duration-200 active:scale-95 text-white"
+                      >
+                        Agent Actions
+                      </button>
+                      <button
+                        onClick={() => handleSimulateAging(inv.id, inv.customer_name)}
+                        title="DEV TOOL: Backdate this invoice by 10 days to simulate aging"
+                        className="bg-amber-600/20 hover:bg-amber-500 border border-amber-500/40 text-amber-400 hover:text-black text-xs px-2.5 py-1.5 rounded-md font-medium shadow-sm transition-all duration-200 active:scale-95"
+                      >
+                        ⏳ Age +10d
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -359,15 +404,24 @@ export default function Dashboard() {
                             <span className="bg-indigo-900/60 text-indigo-300 text-xs px-2.5 py-0.5 rounded font-bold">✉️ EMAIL DISPATCH</span>
                             <span className="text-xs text-gray-400">Formal Letter</span>
                           </div>
-                          <button 
-                            onClick={() => {
-                              navigator.clipboard.writeText(generatedEmail);
-                              alert("Email script copied to clipboard!");
-                            }}
-                            className="bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-500/30 text-[10px] px-2.5 py-1 rounded font-medium transition-all active:scale-95"
-                          >
-                            📋 Copy
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(generatedEmail);
+                                alert("Email script copied to clipboard!");
+                              }}
+                              className="bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-500/30 text-[10px] px-2.5 py-1 rounded font-medium transition-all active:scale-95"
+                            >
+                              📋 Copy
+                            </button>
+                            <button
+                              onClick={triggerWhatsAppSend}
+                              title={`Open WhatsApp for ${selectedInvoice.customer_name} with email pre-filled`}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] px-2.5 py-1 rounded font-medium shadow-sm transition-all active:scale-95 flex items-center gap-1"
+                            >
+                              💬 WhatsApp
+                            </button>
+                          </div>
                         </div>
                         <p className="whitespace-pre-wrap text-gray-200 text-xs leading-relaxed bg-gray-950 p-3 rounded select-all border border-gray-800 font-mono min-h-[160px] max-h-[220px] overflow-y-auto">
                           {generatedEmail}
