@@ -10,7 +10,22 @@ from email.mime.multipart import MIMEMultipart
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import setuptools  # Ensures pkg_resources is available for razorpay
+import sys
+import types
+
+# Compatibility shim: Python 3.12+ and setuptools >= 82 removed pkg_resources,
+# but razorpay 1.4.1 still imports pkg_resources to check its version.
+try:
+    import pkg_resources
+except ModuleNotFoundError:
+    class _MockDist:
+        version = "1.4.1"
+
+    _mock_pkg = types.ModuleType("pkg_resources")
+    _mock_pkg.require = lambda *a, **kw: [_MockDist()]
+    _mock_pkg.get_distribution = lambda *a, **kw: _MockDist()
+    sys.modules["pkg_resources"] = _mock_pkg
+
 import razorpay
 from groq import Groq
 from supabase import create_client, Client
