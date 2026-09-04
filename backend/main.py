@@ -10,6 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import setuptools  # Ensures pkg_resources is available for razorpay
 import razorpay
 from groq import Groq
 from supabase import create_client, Client
@@ -32,10 +33,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Clients
-razorpay_client = razorpay.Client(auth=(os.getenv("RAZORPAY_KEY_ID"), os.getenv("RAZORPAY_KEY_SECRET")))
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+# Initialize Clients safely (never crash on startup if env vars are missing or delayed)
+RZP_KEY_ID = os.getenv("RAZORPAY_KEY_ID") or "rzp_test_placeholder"
+RZP_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET") or "rzp_secret_placeholder"
+razorpay_client = razorpay.Client(auth=(RZP_KEY_ID, RZP_KEY_SECRET))
+
+GROQ_KEY = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=GROQ_KEY) if GROQ_KEY else None
+
+SUPA_URL = os.getenv("SUPABASE_URL")
+SUPA_KEY = os.getenv("SUPABASE_KEY")
+supabase: Client | None = None
+if SUPA_URL and SUPA_KEY:
+    try:
+        supabase = create_client(SUPA_URL, SUPA_KEY)
+    except Exception as _e:
+        print(f"[Supabase Init Warning] {_e}")
 
 # In-Memory fallback store for when Supabase table is not yet created
 in_memory_ledger: dict[str, dict] = {}
