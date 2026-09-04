@@ -19,10 +19,14 @@ load_dotenv()
 
 app = FastAPI()
 
-# Enable CORS so your Next.js frontend can communicate with FastAPI freely
+# Enable CORS — reads ALLOWED_ORIGINS env var in production (set to your Vercel URL).
+# Falls back to ["*"] for local development.
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",")] if _raw_origins != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
